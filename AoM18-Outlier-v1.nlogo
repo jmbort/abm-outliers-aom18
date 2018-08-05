@@ -1,26 +1,37 @@
-;;define breeds
+;; developed by jmbort@syr.edu
+;; with code contributed from Connxt
+
+
+;;define breeds (agent types)
 breed [ resources res ] ;; Resources
 breed [ entrepreneurs ent ] ;; Entrepreneurs
 
 
 
-;;attributes of resource
+;;attributes of a resource
 resources-own[
   ;;value of resource
   value
 ]
 
+;;attributes of an entrepreneur
 entrepreneurs-own[
   ;;value of starting endowments
   endowments
-  ;;value of expectations
-  expectations
+
+  ;;search neighborhood
+  neighborhood
+
+  ;;capture probability
+  captureProb
+
+
+  ;;resources captured
+  resourcesCaptured
 
   ;;track movements
   movements
 
-  ;;search neighborhood
-  neighborhood
 
   resource-coords
   target-resource-coords
@@ -28,6 +39,10 @@ entrepreneurs-own[
 
   ;; outlier flag
   isOutlier
+
+  ;; movement
+  movesPerTick
+
 
 ]
 
@@ -53,6 +68,7 @@ to setup
   update-plots
 end
 
+;;primary simulation loop
 to go
   ifelse ticks >= tick-count [
     stop
@@ -62,60 +78,95 @@ to go
     ]
   ]
 
-  ifelse count entrepreneurs <= 0 [ stop ] ;;if everyone is dead, stop
+  ifelse count entrepreneurs <= 1 [ stop ] ;;if everyone is dead, stop
   [
     ask entrepreneurs [
-      ifelse length resource-coords >= 1 [
+      ;;repeat the number of moves the agent is allowed
+      repeat movesPerTick [
+        set movements movements + 1
+        ifelse length resource-coords >= 1 [
           capture-resources who
-      ] [
-         scan-resources who
+        ] [
+          scan-resources who
+        ]
       ]
    ]
   ]
-  ;;check outliers
-  outlier-check
+
+  ;;if outliers can change status (e.g. new outliers can emerge, old can lose their status)
+  if outliers-change = true[
+    outlier-check
+  ]
+
   ;;regenerate resources?
   if RegenerateResources = true[
     ;;regenerate every twelve ticks
     if (ticks mod 12) = 0[
-      generate-resources [ false ]
+      generate-resources false
     ]
   ]
   tick
 end
 
+;; Handle outliers
 to outlier-check
 
    ;; standard deviation, mean of endowments
   let sd standard-deviation [endowments] of entrepreneurs
   let m mean [endowments] of entrepreneurs
   let mx max [endowments] of entrepreneurs
+  let md median [endowments] of entrepreneurs
 
   ask entrepreneurs[
       ;;normal distribution use sd
       ifelse powerLaw = false[
        ;; is this an outlier?
        ifelse endowments > ( m + (sd * 2)) [
-        set color red
         set isOutlier 1
        ][
-        set color blue
         set isOutlier 0
        ]
-      ][;;power law use quantile?
-        ifelse endowments > (.9 * mx)[
-          set color red
+      ][;;power law use quantile (top ten percent)?
+
+        ifelse endowments > (1.5 * md)[
           set isOutlier 1
         ][
-         set color blue
          set isOutlier 0
         ]
       ]
+
+      ;;was outlier flag set?
+      ifelse isOutlier = 1 [
+        set color red
+        ;;can outliers see more?
+        ifelse outliers-see-more = true [
+           set neighborhood moore-offsets 4 false
+        ][
+           set neighborhood moore-offsets 1 false
+        ]
+        ifelse outliers-move-faster = true [
+           set movesPerTick 5
+        ][
+           set movesPerTick 1
+        ]
+        ifelse outliers-double-capture = true [
+           set captureProb (captureProbability * 2)
+        ][
+
+         set captureProb captureProbability
+        ]
+     ][ ;; not an outlier, turn off their advantages
+       set color blue
+       set neighborhood moore-offsets 1 false
+       set movesPerTick 1
+       set captureProb captureProbability
+     ]
   ]
 
 end
 
 to capture-resources [ turtle-id ]
+
   ask turtle turtle-id [
 
     let resourceValue 0
@@ -123,6 +174,7 @@ to capture-resources [ turtle-id ]
 
     ;;hold coords while switching between agent types
     let tempCoords []
+
     ;;does the ent have some targets yet?
     ifelse target-resource-coords = [] [
       ;; loop through the resources the ent knows about
@@ -151,13 +203,14 @@ to capture-resources [ turtle-id ]
         ;;check again
         if round(xcor) != item 0 target-resource-coords or round(ycor) != item 1 target-resource-coords [
           ;; attempt capture
-          ifelse random 100 < captureProbability[
+          ifelse random 100 < captureProb[
             ;;capture the resource
             ask resources-on patch round(xcor) round(ycor) [
                set captureValue value
                die
             ]
             set endowments endowments + captureValue
+            set resourcesCaptured resourcesCaptured + 1
           ][;;failed capture, added to failed resources
             set failed-resource-coords target-resource-coords
           ]
@@ -173,13 +226,14 @@ to capture-resources [ turtle-id ]
         ]
       ][;; ent has reached resource
 
-        ifelse random 100 < captureProbability[
+        ifelse random 100 < captureProb[
             ;;capture the resource
             ask resources-on patch round(xcor) round(ycor) [
                set captureValue value
                die
             ]
             set endowments endowments + captureValue
+            set resourcesCaptured resourcesCaptured + 1
           ][;;failed capture, added to failed resources
             set failed-resource-coords target-resource-coords
           ]
@@ -206,6 +260,7 @@ to scan-resources [ turtle-id ]
   ;; Makes the Traditional agent walk in random directions while looking for Opportunity agents
   ;; It also gets the current location of the Traditional agent
   ask turtle turtle-id [
+
     turtle-random-walk turtle-id
     set x round(xcor)
     set y round(ycor)
@@ -215,7 +270,11 @@ to scan-resources [ turtle-id ]
   ask patches at-points neighborhood[
 
     ;;enable this to view the search neighborhood
-    ;;set pcolor [color] of myself
+    if ShowSearch = true[
+      set pcolor [color] of myself
+    ]
+
+
     let px pxcor
     let py pycor
     if any? resources-on patch px py [
@@ -231,13 +290,17 @@ to scan-resources [ turtle-id ]
       ];;
     ];;end resources on patch
   ];;end patches
-
+  ;;burn an endowment
+  if subtract-endowment turtle-id = true [
+     die
+     stop
+  ]
 end
 
 ;; populate environment with resources
 to generate-entrepreneurs
 
-  let sd 2
+  let sd StartingEndowments * 0.30
 
   set totalEndowments 0
   ;;loop to populate entrepreneurs
@@ -255,8 +318,9 @@ to generate-entrepreneurs
       ;; is spot empty?
       if not any? turtles-on patch x y [
         create-entrepreneurs 1[
-
+          set movesPerTick 1
           set isOutlier 0
+          set resourcesCaptured 0
           set resource-coords []
           set target-resource-coords []
           set failed-resource-coords []
@@ -268,16 +332,10 @@ to generate-entrepreneurs
           set neighborhood moore-offsets 1 false
           ifelse PowerLaw = true[;;power law endowment distribution
             set endowments random-pareto .5 startingEndowments (startingEndowments * 10)
-          ][;;not power law
+          ][;;else normal distribution
             set endowments random-normal StartingEndowments sd
           ]
           set totalEndowments totalEndowments + totalEndowments
-          ;;change color of outlier
-          if endowments > (StartingEndowments + (sd * 2)) [
-           set color red
-           set isOutlier 1
-           set neighborhood moore-offsets 2 false
-          ]
 
           ;; entrepreneur successfully placed, break out of the loop
           set placed true
@@ -287,20 +345,28 @@ to generate-entrepreneurs
       ];; end if
     ];;end repeat
 
+    ;;check who's an outlier to finish initializing the entrepreneurs
+    outlier-check
 end
 
 ;; populate environment with resources
 to generate-resources [ initialRun ]
+
   ;;loop
-  let resourceValue 5
-  let sdResourceValue 2
+  let resourceValue StartingEndowments * 0.10
+  let sdResourceValue resourceValue * 0.20
   let resCount ResourceCount
 
   if initialRun = false[
     ;;repopulate with somewhere around 1/2 the resources
-   set resCount (random-normal resCount resCount * 0.20) * 0.50
+    ifelse count resources < ResourceCount [ ;;don't let resource generation get out of hand
+      set resCount (random-normal resCount resCount * 0.20) * 0.50
+    ][
+      set resCount 0
+    ]
   ]
-  repeat ResourceCount [
+
+  repeat resCount [
 
     ;; placed variable
     let placed false
@@ -356,8 +422,13 @@ end
 to-report subtract-endowment [ turtle-id ]
   let is-dead false
   ask turtle turtle-id [
-    set endowments endowments - 1
-    set movements movements + 1
+    ;;outliers burn endowments at a slower pace
+    ifelse isOutlier = 1[
+       set endowments endowments - 0.25
+    ][
+      set endowments endowments - 1
+    ]
+
     if endowments <= 0 [
       set is-dead true
     ]
@@ -391,6 +462,36 @@ end
 to-report endowmentsNormals
   let endowmentsNormal sum [endowments] of entrepreneurs with [isOutlier = 0]
   report endowmentsNormal
+end
+
+;; report on top/bottom percentile (flag = true = top ten; ofInterest = true = endowments)
+to-report percentileReport [flag ofInterest]
+
+  let endowmentReport 0
+  let mx (max [endowments] of entrepreneurs)
+
+  ifelse flag = true[
+    ifelse ofInterest = true[
+      ;;top ten percent, endowments
+      ;;set endowmentReport sum [endowments] of entrepreneurs with [endowments > (mx * 0.90)]
+      set endowmentReport sum [endowments] of entrepreneurs with [isOutlier = 1]
+    ][
+      ;;top ten percent, endowments
+      ;;set endowmentReport sum [resourcesCaptured] of entrepreneurs with [resourcesCaptured > (mx * 0.90)]
+      set endowmentReport sum [endowments] of entrepreneurs with [isOutlier = 0]
+    ]
+   ][
+    ifelse ofInterest = true[
+      ;;everyone else
+      ;;set endowmentReport sum [endowments] of entrepreneurs with [endowments < (mx * 0.90)]
+      set endowmentReport sum [resourcesCaptured] of entrepreneurs with [isOutlier = 1]
+    ][
+     ;;top ten percent, endowments
+      ;;set endowmentReport sum [resourcesCaptured] of entrepreneurs with [resourcesCaptured < (mx * 0.90)]
+       set endowmentReport sum [resourcesCaptured] of entrepreneurs with [isOutlier = 0]
+    ]
+   ]
+   report endowmentReport
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -454,7 +555,7 @@ INPUTBOX
 106
 181
 ResourceCount
-100.0
+200.0
 1
 0
 Number
@@ -493,7 +594,7 @@ INPUTBOX
 326
 107
 StartingEndowments
-10.0
+100.0
 1
 0
 Number
@@ -506,8 +607,8 @@ SLIDER
 alpha
 alpha
 0
-3
-1.0
+5
+5.0
 0.1
 1
 NIL
@@ -539,7 +640,7 @@ INPUTBOX
 403
 70
 tick-count
-2000.0
+60.0
 1
 0
 Number
@@ -553,7 +654,7 @@ captureProbability
 captureProbability
 0
 100
-31.0
+49.0
 1
 1
 NIL
@@ -568,9 +669,9 @@ Endowment Spread
 NIL
 NIL
 0.0
-100.0
+200.0
 0.0
-20.0
+30.0
 true
 false
 "" ""
@@ -578,9 +679,9 @@ PENS
 "default" 1.0 1 -16777216 true "" "histogram [ endowments ] of entrepreneurs"
 
 PLOT
-471
+525
 10
-671
+725
 160
 Outlier Count
 NIL
@@ -606,42 +707,155 @@ RegenerateResources
 1
 -1000
 
+SWITCH
+301
+165
+453
+198
+outliers-see-more
+outliers-see-more
+0
+1
+-1000
+
+SWITCH
+301
+210
+454
+243
+outliers-move-faster
+outliers-move-faster
+0
+1
+-1000
+
+BUTTON
+1180
+569
+1253
+602
+Go One
+go
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SWITCH
+301
+253
+454
+286
+outliers-double-capture
+outliers-double-capture
+0
+1
+-1000
+
+PLOT
+294
+407
+591
+596
+Resources Captured
+NIL
+NIL
+0.0
+50.0
+0.0
+50.0
+true
+false
+"" ""
+PENS
+"default" 1.0 1 -16777216 true "" "histogram [ resourcesCaptured ] of entrepreneurs"
+
+SWITCH
+299
+301
+453
+334
+outliers-change
+outliers-change
+1
+1
+-1000
+
+MONITOR
+483
+197
+606
+242
+Outliers (Endowments)
+percentileReport true true
+0
+1
+11
+
+MONITOR
+482
+249
+607
+294
+Others (Endowments)
+percentileReport true false
+0
+1
+11
+
+MONITOR
+614
+196
+724
+241
+Outliers (Resources)
+percentileReport false true
+0
+1
+11
+
+MONITOR
+612
+250
+724
+295
+Others (Resources)
+percentileReport false false
+0
+1
+11
+
+SWITCH
+408
+10
+517
+43
+ShowSearch
+ShowSearch
+1
+1
+-1000
+
 @#$#@#$#@
 ## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+A simple model where entrepreneurs are given starting endowments and try to capture resources.
 
-## HOW IT WORKS
+## Other things of interest
 
-(what rules the agents use to create the overall behavior of the model)
+Resource site for outlier research in entrepreneurship
 
-## HOW TO USE IT
-
-(how to use the model, including a description of each of the items in the Interface tab)
-
-## THINGS TO NOTICE
-
-(suggested things for the user to notice while running the model)
-
-## THINGS TO TRY
-
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
-
-## EXTENDING THE MODEL
-
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
-
-## NETLOGO FEATURES
-
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
-
-## RELATED MODELS
-
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+https://sites.google.com/site/simbuildtest/articles
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+jmbort@syr.edu (https://www.researchgate.net/profile/James_Bort)
+Connxt
 @#$#@#$#@
 default
 true
