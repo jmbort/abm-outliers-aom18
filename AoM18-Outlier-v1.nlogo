@@ -1,6 +1,9 @@
 ;; developed by jmbort@syr.edu
 ;; with code contributed from Connxt
 
+;; csv extenstion is useful for exporting
+extensions [csv]
+
 
 ;;define breeds (agent types)
 breed [ resources res ] ;; Resources
@@ -65,6 +68,13 @@ to setup
   generate-entrepreneurs
   ;;check outliers
   outlier-check
+
+  ;; output outliers?
+  if write-endowment-file = true [
+   export-endowments
+  ]
+
+  ;;update the plots prior to running
   update-plots
 end
 
@@ -493,6 +503,27 @@ to-report percentileReport [flag ofInterest]
    ]
    report endowmentReport
 end
+
+to export-endowments
+
+  ;;clear any previous output
+  clear-output
+  ;;delete previous file, future enhancement - ask before deleting
+  carefully [file-delete "endowment-distribution.csv"] []
+  ;; hard code file name for now
+  file-open "endowment-distribution.csv"
+  ;; header
+  file-type "ID,endowments"
+  file-type "\n"
+
+  ;; loop through the entrepreneurs and write their endowments
+  ask entrepreneurs [
+    ;; write line
+    file-type who file-type "," file-write endowments file-type "\n"
+  ]
+  ;;close file
+  file-close
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 732
@@ -545,7 +576,7 @@ SWITCH
 95
 PowerLaw
 PowerLaw
-1
+0
 1
 -1000
 
@@ -838,6 +869,17 @@ SWITCH
 ShowSearch
 ShowSearch
 1
+1
+-1000
+
+SWITCH
+302
+349
+453
+382
+write-endowment-file
+write-endowment-file
+0
 1
 -1000
 
