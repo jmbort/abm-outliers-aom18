@@ -340,10 +340,15 @@ to generate-entrepreneurs
           set xcor x
           set ycor y
           set neighborhood moore-offsets 1 false
-          ifelse PowerLaw = true[;;power law endowment distribution
+
+          ifelse Distribution = "PowerLaw"[;;power law endowment distribution
             set endowments random-pareto .5 startingEndowments (startingEndowments * 10)
-          ][;;else normal distribution
-            set endowments random-normal StartingEndowments sd
+          ][
+            ifelse Distribution = "Normal" [;;else normal distribution
+              set endowments random-normal StartingEndowments sd
+            ][
+            set endowments log-normal StartingEndowments (StartingEndowments / 2)
+            ]
           ]
           set totalEndowments totalEndowments + totalEndowments
 
@@ -417,6 +422,16 @@ to-report random-pareto [ pareto low high ]
    ;; see: http://en.wikipedia.org/wiki/Pareto_distribution
 end
 
+;; function via reddit user: DJOstrichHead - moderator of /r/NetLogo
+to-report  log-normal [#mu #sigma]
+
+  let beta ln (1 + ((#sigma ^ 2) / (#mu ^ 2)))
+
+  let x exp (random-normal (ln (#mu) - (beta / 2)) sqrt beta)
+
+  report x
+end
+
 ;;moore search
 to-report moore-offsets [n tesOff]
   let result [list pxcor pycor] of patches with [abs pxcor <= n and abs pycor <= n]
@@ -438,7 +453,6 @@ to-report subtract-endowment [ turtle-id ]
     ][
       set endowments endowments - 1
     ]
-
     if endowments <= 0 [
       set is-dead true
     ]
@@ -570,10 +584,10 @@ NIL
 1
 
 SWITCH
-8
-62
-106
-95
+728
+575
+826
+608
 PowerLaw
 PowerLaw
 0
@@ -597,7 +611,7 @@ INPUTBOX
 215
 180
 EntrepreneurCount
-300.0
+100.0
 1
 0
 Number
@@ -625,7 +639,7 @@ INPUTBOX
 326
 107
 StartingEndowments
-100.0
+20.0
 1
 0
 Number
@@ -671,7 +685,7 @@ INPUTBOX
 403
 70
 tick-count
-60.0
+36.0
 1
 0
 Number
@@ -882,6 +896,16 @@ write-endowment-file
 0
 1
 -1000
+
+CHOOSER
+11
+58
+104
+103
+Distribution
+Distribution
+"Normal" "PowerLaw" "LogNormal"
+2
 
 @#$#@#$#@
 ## WHAT IS IT?
