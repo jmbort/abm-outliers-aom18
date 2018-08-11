@@ -128,8 +128,9 @@ to outlier-check
   let md median [endowments] of entrepreneurs
 
   ask entrepreneurs[
+
       ;;normal distribution use sd
-      ifelse powerLaw = false[
+      ifelse Distribution = "Normal"[
        ;; is this an outlier?
        ifelse endowments > ( m + (sd * 2)) [
         set isOutlier 1
@@ -137,7 +138,7 @@ to outlier-check
         set isOutlier 0
        ]
       ][;;power law use quantile (top ten percent)?
-
+        ;;need to update to be more accurate
         ifelse endowments > (1.5 * md)[
           set isOutlier 1
         ][
@@ -175,6 +176,7 @@ to outlier-check
 
 end
 
+;; attempt to capture a resource
 to capture-resources [ turtle-id ]
 
   ask turtle turtle-id [
@@ -262,7 +264,9 @@ to capture-resources [ turtle-id ]
   ];;end ask
 end
 
+;; scan neighborhood of entrepreneur to identify resources
 to scan-resources [ turtle-id ]
+
   let x 0
   let y 0
   let z 0
@@ -583,17 +587,6 @@ NIL
 NIL
 1
 
-SWITCH
-728
-575
-826
-608
-PowerLaw
-PowerLaw
-0
-1
--1000
-
 INPUTBOX
 8
 121
@@ -706,10 +699,10 @@ NIL
 HORIZONTAL
 
 PLOT
-12
-406
-281
-604
+7
+393
+282
+591
 Endowment Spread
 NIL
 NIL
@@ -775,10 +768,10 @@ outliers-move-faster
 -1000
 
 BUTTON
-1180
-569
-1253
-602
+1203
+562
+1276
+595
 Go One
 go
 NIL
@@ -803,10 +796,10 @@ outliers-double-capture
 -1000
 
 PLOT
-294
-407
+288
+395
 591
-596
+591
 Resources Captured
 NIL
 NIL
@@ -905,7 +898,7 @@ CHOOSER
 Distribution
 Distribution
 "Normal" "PowerLaw" "LogNormal"
-2
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1228,10 +1221,60 @@ false
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
 @#$#@#$#@
-NetLogo 6.0.1
+NetLogo 6.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="experiment" repetitions="100" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <metric>sum [endowments] of entrepreneurs with [isOutlier = 1]</metric>
+    <metric>sum [resourcesCaptured] of entrepreneurs</metric>
+    <enumeratedValueSet variable="alpha">
+      <value value="5"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="write-endowment-file">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="RegenerateResources">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="ShowSearch">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="outliers-change">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="StartingEndowments">
+      <value value="20"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="outliers-move-faster">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="Distribution">
+      <value value="&quot;PowerLaw&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="outliers-see-more">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="captureProbability">
+      <value value="49"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="ResourceCount">
+      <value value="200"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="EntrepreneurCount">
+      <value value="100"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="outliers-double-capture">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="tick-count">
+      <value value="36"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default
